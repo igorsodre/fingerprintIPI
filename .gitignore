@@ -1,0 +1,5 @@
+# ignore all CSV files
+*.csv
+*.ipynb_checkpoints
+output/
+Images/
