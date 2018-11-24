@@ -65,23 +65,8 @@ def localHistogramEqualization(img):
             newImage[i: i+8, j:j+8] = cv2.equalizeHist(img[i:i+8, j:j+8])
     return np.uint8(newImage)
 
-def resizeImage(img, width, height):
-    newImage = np.zeros(shape=img.shape)
-    count = 0
-    currentMin = width
-    for i in range(0, height, 5):
-        for j in range(0, width):
-            if (img[i,j] < 255 or j > currentMin):
-                currentMin = min(currentMin, j)
-                newImage[i:i+5] = cv2.resize(img[i: i+5, j: width - j], (width, 5), cv2.INTER_CUBIC)
-                break
-    print(count)
-    displayImg(img)
-    displayImg(newImage)
-
 def cropImage(img):
     mascara = (img<255)*1
-#     print(mascara)
     i, j = np.where(mascara == 0)
     maxH = max(i);
     minH = min(i);
@@ -95,14 +80,14 @@ def geomDistortion(img, N):
     TamanhoNovaImagem = np.ceil(W+2*(max(new_vecw)-min(new_vecw)))+1
     ip = np.ones(shape = [H, int(round(TamanhoNovaImagem))])*255
     last_vecw = new_vecw.shape[0]
-    print(TamanhoNovaImagem)
+
     if (last_vecw < H-1):
         for i in range(last_vecw, H-1):
             new_vecw = np.append(new_vecw, new_vecw[last_vecw-1])
-    for i in range(0, H-1):   
-        li = resize(img[i,:], (int(W+2*(max(new_vecw) - new_vecw[i])),1))
+    for i in range(0, H-1):
+        li = resize(np.array([img[i,:]]).T, (int(W+2*(max(new_vecw) - new_vecw[i])),1))
         lisize = li.shape[0]
-        ip[i,int(round((TamanhoNovaImagem-lisize)/2)):int(round((TamanhoNovaImagem-lisize)/2)+lisize)] = li.T; 
+        ip[i,int(round((TamanhoNovaImagem-lisize)/2)):int(round((TamanhoNovaImagem-lisize)/2)+lisize)] = li.T;
     return (ip)
 
 def detectPolyn(img, N):
@@ -133,14 +118,8 @@ def tranformFingerprint():
     cropImg = cropImage(binaryMean)
     imgDistortion = geomDistortion(cropImg, 5)
     displayImg(imgDistortion)
-    # res = cv2.resize(binaryMean,(2*width, 2*height), interpolation = cv2._INPUT_ARRAY_STD_VECTOR_MAT)
-    #resizeImage(binaryMean, width, height)
-    # displayImg(res)
-    # result = np.polyfit([i for i in range(0, binaryMean.shape[1])], binaryMean[0], 5)
-    # displayImg(binaryMean)
 
 def main():
     tranformFingerprint()
-    # displayBinatyImages()
 
 main()
