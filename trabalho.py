@@ -2,15 +2,23 @@ import numpy as np
 import cv2
 import math
 import subprocess
+import random
 from skimage.transform import resize
 from scipy.misc import imresize
 
 IMG_PATH = "./Images/SIRE-"
 OUTPUT_PATH = "./output/"
+TEMP_OUTPUT = "./temp/"
 
 def displayImg(img, windowname = "window"):
     cv2.imshow(windowname, img)
     cv2.waitKey(0)
+
+def saveImgsTemp(imgArr):
+    for i, (img) in enumerate(imgArr):
+    # displayImg(cv2.resize(bubbledImg, (int(width/2), int(height/2))))
+        cv2.imwrite(TEMP_OUTPUT + str(i) + ".png", img)
+        cv2.imwrite(TEMP_OUTPUT + str(i) + ".min.png", cv2.resize(img, (int(img.shape[1]/2), int(img.shape[0]/2))))
 
 def applyGamma(img):
     gamma = 1.5
@@ -88,7 +96,56 @@ def geomDistortion(img, N):
         li = resize(np.array([img[i,:]]).T, (int(W+2*(max(new_vecw) - new_vecw[i])),1))
         lisize = li.shape[0]
         ip[i,int(round((TamanhoNovaImagem-lisize)/2)):int(round((TamanhoNovaImagem-lisize)/2)+lisize)] = li.T;
-    return (ip)
+
+    offset = int((ip.shape[1]-(W))/2)
+
+    return (ip[:, offset:offset + W])
+
+def applyTreshHold(img, ths = 127):
+    return (np.array([np.array([np.uint8(pixel) if pixel <= ths else np.uint8(255) for pixel in line]) for line in img]),
+            np.array([np.array([np.uint8(pixel) if pixel >= ths else np.uint8(255) for pixel in line]) for line in img]))
+
+def getProbability(currentPlace, center, ths = 0.5):
+    scaleFactor = 1 / (1 + abs(currentPlace - center)/300)
+    # print(currentPlace, scaleFactor)
+    randNum = random.random() * scaleFactor
+    return randNum < ths
+
+def getRandomElipse(template):
+    x, y = template.shape
+    center = (np.ceil(x/2), np.ceil(y/2))
+    majorAxis = random.randint(1, 5)
+    minorAxis = random.randint(1, 3)
+    angulo = random.randint(0, 180)
+    # color = random.randint(0, 255)
+    color = 255
+    cv2.ellipse(template, (math.ceil(x/2), math.ceil(y/2)), (majorAxis, minorAxis), angulo, 0,360, color, -1)
+    return np.uint8(template)
+
+def applyRandomPatherns(img):
+    height, width = img.shape
+    center = int(width/2)
+    newImage = img.copy()
+    windowSize = 5
+    probArray = []
+    for i in range(0, height, windowSize):
+        for j in range(0, width, windowSize):
+            probabilitie = getProbability(j, center)
+            if probabilitie:
+                probArray.append((i,j))
+                elipse = getRandomElipse(img[i: i+windowSize, j:j+windowSize])
+                newImage[i:i+windowSize, j:j+windowSize] += elipse
+
+    # print(probArray)
+    return np.uint8(newImage)
+
+def customSum(img1, img2):
+    height, width = img1.shape
+    newImage = np.zeros(shape=img1.shape)
+    for i in range(0, height):
+        for j in range(0, width):
+            newImage[i, j] = min(img1[i,j], img2[i, j])
+    return newImage
 
 def detectPolyn(img, N):
     H, W = img.shape
@@ -107,6 +164,9 @@ def detectPolyn(img, N):
     pol = np.polyfit(vech, -1*(vecw)+H,N)
     return np.polyval(pol, vech)
 
+def scoreImages(imgsPath):
+    print("Cheguei aqui")
+
 def tranformFingerprint():
     imgpath = IMG_PATH + "1.bmp"
     img = cv2.imread(imgpath, cv2.IMREAD_GRAYSCALE)
@@ -115,11 +175,21 @@ def tranformFingerprint():
     imgsWithGauss = applyGaussFilter(imgWithGamma)
     binaryMean = saveGauss(imgsWithGauss)
     height, width = binaryMean.shape
+
     cropImg = cropImage(binaryMean)
-    imgDistortion = geomDistortion(cropImg, 5)
-    displayImg(imgDistortion)
+    imgDistortion = np.uint8(geomDistortion(cropImg, 5) * 255)
+    thresholdLowImg, thresholdHighImg = applyTreshHold(imgDistortion, 80)
+    bubbledImg = applyRandomPatherns(thresholdLowImg)
+
+    # result = customSum(bubbledImg, thresholdHighImg)
+    result = cv2.addWeighted(bubbledImg, 0.9, thresholdHighImg, 0.2, 0)
+    saveImgsTemp([bubbledImg, thresholdHighImg, result])
+    # displayImg(cv2.resize(bubbledImg, (int(width/2), int(height/2))))
 
 def main():
     tranformFingerprint()
+    # eli = np.zeros(shape=(512, 512))
+    # cv2.ellipse(eli,(256,256),(50,30),0,0,360,255,4)
+    # displayImg(eli)
 
 main()
