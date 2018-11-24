@@ -164,6 +164,47 @@ def detectPolyn(img, N):
     pol = np.polyfit(vech, -1*(vecw)+H,N)
     return np.polyval(pol, vech)
 
+def fadeCrop(img):
+    grau = 2
+    fade = 6
+
+    h, w = img.shape
+    x = np.array([i for i in range(0, 501, 50)])
+    y = np.array([100, 80, 60, 50, 50, 50, 50, 50, 50, 50, 50])
+    p = np.polyfit(x, y, grau)
+    polinomio = np.polyval(p, np.array([[i for i in range(0, h+1)]]))
+    polinomio = polinomio[0]
+    somaFade = np.flip(np.array([i for i in range(0, 256, fade)]), 0)
+    tamSomaFade = len(somaFade)
+
+    cropped = np.ones(shape=img.shape) * 255
+    for i in range(0, h):
+        for j in range(0, w):
+            if ((j > polinomio[ i ]) and (j < (w - polinomio[ i ]))):
+                cropped[i, j] = img[i, j]
+                if (math.ceil(j - polinomio[ i ]) <= tamSomaFade):
+                    cropped[i, j] += somaFade[math.ceil(j - polinomio[ i ]) -1]
+                if (math.ceil((w - polinomio[ i ]) - j) > 0 and math.ceil((w - polinomio[i]) - j) <= tamSomaFade):
+                    cropped[i, j] += somaFade[math.ceil((w - polinomio[i]) - j) -1]
+            if(cropped[i, j] > 255):
+                cropped[i, j] = 255
+
+    for j in range(0, w):
+        for i in range(0, tamSomaFade):
+            cropped[i, j] += somaFade[i]
+            if(cropped[i, j] > 255):
+                cropped[i, j] = 255
+
+    somaFade = np.flip(somaFade, 0)
+
+    for j in range(0, w):
+        for i in range(h - tamSomaFade +1, h):
+            cropped[i, j] += somaFade[i - h + tamSomaFade]
+            if(cropped[i, j] > 255):
+                cropped[i, j] = 255
+
+    return np.uint8(cropped)
+
 def scoreImages(imgsPath):
     print("Cheguei aqui")
 
@@ -180,16 +221,12 @@ def tranformFingerprint():
     imgDistortion = np.uint8(geomDistortion(cropImg, 5) * 255)
     thresholdLowImg, thresholdHighImg = applyTreshHold(imgDistortion, 80)
     bubbledImg = applyRandomPatherns(thresholdLowImg)
-
-    # result = customSum(bubbledImg, thresholdHighImg)
-    result = cv2.addWeighted(bubbledImg, 0.9, thresholdHighImg, 0.2, 0)
-    saveImgsTemp([bubbledImg, thresholdHighImg, result])
+    overlayImg = cv2.addWeighted(bubbledImg, 0.9, thresholdHighImg, 0.2, 0)
+    result = fadeCrop(overlayImg)
+    saveImgsTemp([result])
     # displayImg(cv2.resize(bubbledImg, (int(width/2), int(height/2))))
 
 def main():
     tranformFingerprint()
-    # eli = np.zeros(shape=(512, 512))
-    # cv2.ellipse(eli,(256,256),(50,30),0,0,360,255,4)
-    # displayImg(eli)
 
 main()
