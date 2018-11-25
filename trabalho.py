@@ -1,24 +1,38 @@
 import numpy as np
 import cv2
 import math
+from os import listdir
+from os.path import isfile, join
+import os
 import subprocess
 import random
 from skimage.transform import resize
 from scipy.misc import imresize
 
-IMG_PATH = "./Images/SIRE-"
+IMG_PATH = "./Images/"
 OUTPUT_PATH = "./output/"
+PROCESSEC_RESULTS_PATH = OUTPUT_PATH + "results/"
 TEMP_OUTPUT = "./temp/"
 
 def displayImg(img, windowname = "window"):
     cv2.imshow(windowname, img)
     cv2.waitKey(0)
 
-def saveImgsTemp(imgArr):
-    for i, (img) in enumerate(imgArr):
-    # displayImg(cv2.resize(bubbledImg, (int(width/2), int(height/2))))
-        cv2.imwrite(TEMP_OUTPUT + str(i) + ".png", img)
-        cv2.imwrite(TEMP_OUTPUT + str(i) + ".min.png", cv2.resize(img, (int(img.shape[1]/2), int(img.shape[0]/2))))
+def createPath(path):
+    try:
+        os.makedirs(path)
+    except OSError:
+        print("=)")
+
+def saveResult(img, outputPath):
+    createPath(PROCESSEC_RESULTS_PATH)
+    cv2.imwrite(outputPath, img)
+    # cv2.imwrite(outputPath[:-4] + ".min.png", cv2.resize(img, (int(img.shape[1]/2), int(img.shape[0]/2))))
+
+def runBashCommand(command):
+    process = subprocess.Popen(command.split(), stdout=subprocess.PIPE)
+    output, error = process.communicate()
+    return output
 
 def applyGamma(img):
     gamma = 1.5
@@ -30,28 +44,28 @@ def applyGaussFilter(img):
     filterSizes = [3, 5, 7, 9]
     return [(cv2.GaussianBlur(img, (fSize, fSize), cv2.BORDER_DEFAULT), fSize/(2 * math.sqrt(2 * math.log(2)))) for fSize in filterSizes]
 
-def saveGauss(imgsWithGauss):
+def saveGauss(imgsWithGauss, subDirectory=''):
+    createPath(OUTPUT_PATH + subDirectory)
     # imagem onde se calculara a media das imagens binarizadas
     imgMean = np.zeros(shape = imgsWithGauss[0][0].shape)
     for i, (item) in enumerate(imgsWithGauss):
         IMG_NAME = "gauss-"+str(i)
-        IMG_FULL_NAME = OUTPUT_PATH+IMG_NAME
+        IMG_PATH_NAME = OUTPUT_PATH + subDirectory + IMG_NAME
+        IMG_FULL_NAME_PNG = IMG_PATH_NAME+"/"+IMG_NAME+".png"
+        IMG_FULL_NAME_BINARY_RESULT = IMG_FULL_NAME_PNG[:-4]
+        IMG_FULL_NAME_BYNARY_TO_PNG = IMG_FULL_NAME_BINARY_RESULT + ".brw"
 
         # cria o diretorio que ira armazenar os arquivos do valor corrente do filtro gaussiano
-        bashCommand = "mkdir "+IMG_FULL_NAME
-        process = subprocess.Popen(bashCommand.split(), stdout=subprocess.PIPE)
-        output, error = process.communicate()
+        createPath(IMG_PATH_NAME)
 
         # salva a imagem filtrada
-        cv2.imwrite(IMG_FULL_NAME+"/"+IMG_NAME+".png", item[0])
+        cv2.imwrite(IMG_FULL_NAME_PNG, item[0])
 
         # executa o software que faz a binariazacao
-        bashCommand = "mindtct " + IMG_FULL_NAME+"/"+IMG_NAME+".png " + IMG_FULL_NAME+"/"+IMG_NAME
-        process = subprocess.Popen(bashCommand.split(), stdout=subprocess.PIPE)
-        output, error = process.communicate()
+        runBashCommand("mindtct " + IMG_FULL_NAME_PNG + " " + IMG_FULL_NAME_BINARY_RESULT)
 
         # tranforma de binary raw para png
-        result = saveBinary(IMG_FULL_NAME+"/"+IMG_NAME + ".brw", item[0].shape)
+        result = saveBinary(IMG_FULL_NAME_BYNARY_TO_PNG, item[0].shape)
         imgMean += result
     # retorna a media das imagens binarizadas
     return np.uint8(imgMean / 4)
@@ -99,7 +113,7 @@ def geomDistortion(img, N):
 
     offset = int((ip.shape[1]-(W))/2)
 
-    return (ip[:, offset:offset + W])
+    return np.uint8(ip[:, offset:offset + W] * 255)
 
 def applyTreshHold(img, ths = 127):
     return (np.array([np.array([np.uint8(pixel) if pixel <= ths else np.uint8(255) for pixel in line]) for line in img]),
@@ -107,7 +121,6 @@ def applyTreshHold(img, ths = 127):
 
 def getProbability(currentPlace, center, ths = 0.5):
     scaleFactor = 1 / (1 + abs(currentPlace - center)/300)
-    # print(currentPlace, scaleFactor)
     randNum = random.random() * scaleFactor
     return randNum < ths
 
@@ -205,28 +218,37 @@ def fadeCrop(img):
 
     return np.uint8(cropped)
 
-def scoreImages(imgsPath):
-    print("Cheguei aqui")
-
-def tranformFingerprint():
-    imgpath = IMG_PATH + "1.bmp"
+def tranformFingerprint(imgpath, outputSubdirectory):
     img = cv2.imread(imgpath, cv2.IMREAD_GRAYSCALE)
     equalizedImg = localHistogramEqualization(img)
     imgWithGamma = applyGamma(equalizedImg)
     imgsWithGauss = applyGaussFilter(imgWithGamma)
-    binaryMean = saveGauss(imgsWithGauss)
+    binaryMean = saveGauss(imgsWithGauss, outputSubdirectory)
     height, width = binaryMean.shape
 
     cropImg = cropImage(binaryMean)
-    imgDistortion = np.uint8(geomDistortion(cropImg, 5) * 255)
+    imgDistortion = geomDistortion(cropImg, 5)
     thresholdLowImg, thresholdHighImg = applyTreshHold(imgDistortion, 80)
+
     bubbledImg = applyRandomPatherns(thresholdLowImg)
     overlayImg = cv2.addWeighted(bubbledImg, 0.9, thresholdHighImg, 0.2, 0)
     result = fadeCrop(overlayImg)
-    saveImgsTemp([result])
-    # displayImg(cv2.resize(bubbledImg, (int(width/2), int(height/2))))
+    return result
+
+def processAllFingerPrints():
+    # processa imagens
+    images = [f for f in listdir(IMG_PATH) if isfile(join(IMG_PATH, f))]
+    for index, (img) in enumerate(images):
+        result = tranformFingerprint(IMG_PATH + img, img[:-4] + "/")
+        saveResult(result, PROCESSEC_RESULTS_PATH + img[:-4] + ".png")
+
+    # faz o score das imagens geradas
+    processedImages = [f for f in listdir(PROCESSEC_RESULTS_PATH) if isfile(join(PROCESSEC_RESULTS_PATH, f))]
+    for img in processedImages:
+        print(int(runBashCommand("nfiq " + PROCESSEC_RESULTS_PATH + img)))
+        # print("nfiq " + PROCESSEC_RESULTS_PATH + img)
 
 def main():
-    tranformFingerprint()
+    processAllFingerPrints()
 
 main()
