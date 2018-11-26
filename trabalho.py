@@ -18,16 +18,18 @@ def displayImg(img, windowname = "window"):
     cv2.imshow(windowname, img)
     cv2.waitKey(0)
 
-def createPath(path):
+def createPath(path, silentError=True):
     try:
         os.makedirs(path)
     except OSError:
-        print("=)")
+        if not silentError:
+            print(OSError)
 
-def saveResult(img, outputPath):
+def saveResult(img, outputPath, saveMiniature=False):
     createPath(PROCESSEC_RESULTS_PATH)
     cv2.imwrite(outputPath, img)
-    # cv2.imwrite(outputPath[:-4] + ".min.png", cv2.resize(img, (int(img.shape[1]/2), int(img.shape[0]/2))))
+    if saveMiniature:
+        cv2.imwrite(outputPath[:-4] + ".min.png", cv2.resize(img, (int(img.shape[1]/2), int(img.shape[0]/2))))
 
 def runBashCommand(command):
     process = subprocess.Popen(command.split(), stdout=subprocess.PIPE)
@@ -42,10 +44,11 @@ def applyGamma(img):
 
 def applyGaussFilter(img):
     filterSizes = [3, 5, 7, 9]
-    return [(cv2.GaussianBlur(img, (fSize, fSize), cv2.BORDER_DEFAULT), fSize/(2 * math.sqrt(2 * math.log(2)))) for fSize in filterSizes]
+    return [(cv2.GaussianBlur(img, (fSize, fSize), cv2.BORDER_DEFAULT), fSize/(2 * math.sqrt(2 * math.log(2)))) for fSize in filterSizes] + [(img, 1/(2 * math.sqrt(2 * math.log(2))))]
 
 def saveGauss(imgsWithGauss, subDirectory=''):
     createPath(OUTPUT_PATH + subDirectory)
+    arrSize = len(imgsWithGauss)
     # imagem onde se calculara a media das imagens binarizadas
     imgMean = np.zeros(shape = imgsWithGauss[0][0].shape)
     for i, (item) in enumerate(imgsWithGauss):
@@ -68,7 +71,7 @@ def saveGauss(imgsWithGauss, subDirectory=''):
         result = saveBinary(IMG_FULL_NAME_BYNARY_TO_PNG, item[0].shape)
         imgMean += result
     # retorna a media das imagens binarizadas
-    return np.uint8(imgMean / 4)
+    return np.uint8(imgMean / arrSize)
 
 def saveBinary(imgPath, imgShape):
     fd = open(imgPath, 'rb')
@@ -130,7 +133,6 @@ def getRandomElipse(template):
     majorAxis = random.randint(1, 5)
     minorAxis = random.randint(1, 3)
     angulo = random.randint(0, 180)
-    # color = random.randint(0, 255)
     color = 255
     cv2.ellipse(template, (math.ceil(x/2), math.ceil(y/2)), (majorAxis, minorAxis), angulo, 0,360, color, -1)
     return np.uint8(template)
@@ -149,7 +151,6 @@ def applyRandomPatherns(img):
                 elipse = getRandomElipse(img[i: i+windowSize, j:j+windowSize])
                 newImage[i:i+windowSize, j:j+windowSize] += elipse
 
-    # print(probArray)
     return np.uint8(newImage)
 
 def customSum(img1, img2):
@@ -246,7 +247,6 @@ def processAllFingerPrints():
     processedImages = [f for f in listdir(PROCESSEC_RESULTS_PATH) if isfile(join(PROCESSEC_RESULTS_PATH, f))]
     for img in processedImages:
         print(int(runBashCommand("nfiq " + PROCESSEC_RESULTS_PATH + img)))
-        # print("nfiq " + PROCESSEC_RESULTS_PATH + img)
 
 def main():
     processAllFingerPrints()
