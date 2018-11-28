@@ -7,7 +7,6 @@ import os
 import subprocess
 import random
 from skimage.transform import resize
-from scipy.misc import imresize
 
 IMG_PATH = "./Images/"
 OUTPUT_PATH = "./output/"

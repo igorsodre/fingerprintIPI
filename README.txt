@@ -21,12 +21,24 @@ scikit-learn   - pip install scikit-learn
 scikit-image   - pip install scikit-image
 opencv         - pip install opencv-python
 
-para a instalação do software NBIS no sistema ubuntu siga os seguintes passos:
+para a instalação do software NBIS no sistema ubuntu siga os seguintes passos que foram criados pela colega de disciplina Ana Paula(aptarchetti@gmail.com):
 
-
+Baixar NBIS_5.0.0: http://nigos.nist.gov:8080/nist/nbis/nbis_v5_0_0.zip
+Unzip nbis_v5_0_0.zip
+No terminal:
+$ sudo apt-get install cmake libc6-dev libc6-dev-i386 g++-multilib
+$ sudo apt-get install libx11-dev
+$ sudo mkdir /usr/local/NBIS/Main
+$ cd Rel_5.0.0
+$ ./setup.sh /usr/local/NBIS/Main --64 #(or --32)
+$ sudo make config
+$ sudo make it
+$ sudo make install LIBNBIS=yes
+$ export PATH =$PATH:/usr/local/NBIS/Main/bin
 
 com todas as dependências instaladas rode o programa com o comando
 
 python3 trabalho.py
 
 como saida o programa mostra a nota das classificações.
+
