@@ -14,10 +14,12 @@ OUTPUT_PATH = "./output/"
 PROCESSEC_RESULTS_PATH = OUTPUT_PATH + "results/"
 TEMP_OUTPUT = "./temp/"
 
+# recebe uma imagem e a mostra
 def displayImg(img, windowname = "window"):
     cv2.imshow(windowname, img)
     cv2.waitKey(0)
 
+# cria o path de saida caso ele nao exista
 def createPath(path, silentError=True):
     try:
         os.makedirs(path)
@@ -25,27 +27,31 @@ def createPath(path, silentError=True):
         if not silentError:
             print(OSError)
 
+# salva a imagem
 def saveResult(img, outputPath, saveMiniature=False):
     createPath(PROCESSEC_RESULTS_PATH)
     cv2.imwrite(outputPath, img)
     if saveMiniature:
         cv2.imwrite(outputPath[:-4] + ".min.png", cv2.resize(img, (int(img.shape[1]/2), int(img.shape[0]/2))))
 
+# executa o camando do bash passado como argumento
 def runBashCommand(command):
     process = subprocess.Popen(command.split(), stdout=subprocess.PIPE)
     output, error = process.communicate()
     return output
 
-def applyGamma(img):
-    gamma = 1.5
+# aplica o filtro gamma na imagem
+def applyGamma(img, gamma=1.5):
     invGamma = 1/gamma
     table = np.array([((i / 255.0) ** invGamma) * 255 for i in np.arange(0, 256)]).astype("uint8")
     return np.uint8(0.75 * cv2.LUT(img, table))
 
+# aplica filtros gaussianos de tamnha 3, 5, 7 e 9 na imagem
 def applyGaussFilter(img):
     filterSizes = [3, 5, 7, 9]
     return [(cv2.GaussianBlur(img, (fSize, fSize), cv2.BORDER_DEFAULT), fSize/(2 * math.sqrt(2 * math.log(2)))) for fSize in filterSizes] + [(img, 1/(2 * math.sqrt(2 * math.log(2))))]
 
+# executa o programa mindtct e salva o arquivo binario gerado pelo mesmo em formato png
 def saveGauss(imgsWithGauss, subDirectory=''):
     createPath(OUTPUT_PATH + subDirectory)
     arrSize = len(imgsWithGauss)
@@ -73,6 +79,12 @@ def saveGauss(imgsWithGauss, subDirectory=''):
     # retorna a media das imagens binarizadas
     return np.uint8(imgMean / arrSize)
 
+# salva as imagens passadas como paramento
+def saveIntermediaryImgs(imgArr, outputPath, saveMiniature=False):
+    for item in imgArr:
+        saveResult(item[1], outputPath + item[0], saveMiniature)
+
+# recebe um path de um arquivo binario e o salva convertido para imagem
 def saveBinary(imgPath, imgShape):
     fd = open(imgPath, 'rb')
     rows = imgShape[0]
@@ -83,13 +95,15 @@ def saveBinary(imgPath, imgShape):
     cv2.imwrite(imgPath[:-4]+"_binary.png", im)
     return im
 
-def localHistogramEqualization(img):
+# realiza a equializacao de histograma local
+def localHistogramEqualization(img, blockSize=8):
     newImage = np.zeros(shape = img.shape)
-    for i in range(0, img.shape[0], 8):
-        for j in range(0, img.shape[1], 8):
-            newImage[i: i+8, j:j+8] = cv2.equalizeHist(img[i:i+8, j:j+8])
+    for i in range(0, img.shape[0], blockSize):
+        for j in range(0, img.shape[1], blockSize):
+            newImage[i: i+blockSize, j:j+blockSize] = cv2.equalizeHist(img[i:i+blockSize, j:j+blockSize])
     return np.uint8(newImage)
 
+# retira as laterais brancas da imagem
 def cropImage(img):
     mascara = (img<255)*1
     i, j = np.where(mascara == 0)
@@ -99,6 +113,8 @@ def cropImage(img):
     minW = min(j);
     return img[minH:maxH,minW:maxW]
 
+# funcao que aumenta a largura do contorno superior da imagem a partir de uma equacao de grau N
+# foi adaptada do algoritmo do professor zaghetto do link: https://github.com/zaghetto/Touchless2Touch/blob/master/geomDistor.m
 def geomDistortion(img, N):
     H, W = img.shape
     new_vecw = detectPolyn(img, N)
@@ -118,15 +134,18 @@ def geomDistortion(img, N):
 
     return np.uint8(ip[:, offset:offset + W] * 255)
 
+# retorna duas imagens, uma fitrada para niveis acima do threshold e outra para niveis abaixo do threshold
 def applyTreshHold(img, ths = 127):
     return (np.array([np.array([np.uint8(pixel) if pixel <= ths else np.uint8(255) for pixel in line]) for line in img]),
             np.array([np.array([np.uint8(pixel) if pixel >= ths else np.uint8(255) for pixel in line]) for line in img]))
 
+# funcao de que definie a distribuicao de probabilidades da algoritmo de adicao de textura nas digitais
 def getProbability(currentPlace, center, ths = 0.5):
     scaleFactor = 1 / (1 + abs(currentPlace - center)/300)
     randNum = random.random() * scaleFactor
     return randNum < ths
 
+# funcao que gera um template contendo uma elipse gerada randomicamente
 def getRandomElipse(template):
     x, y = template.shape
     center = (np.ceil(x/2), np.ceil(y/2))
@@ -134,9 +153,10 @@ def getRandomElipse(template):
     minorAxis = random.randint(1, 3)
     angulo = random.randint(0, 180)
     color = 255
-    cv2.ellipse(template, (math.ceil(x/2), math.ceil(y/2)), (majorAxis, minorAxis), angulo, 0,360, color, -1)
+    cv2.ellipse(template, (math.ceil(x/2), math.ceil(y/2)), (majorAxis, minorAxis), angulo, 0, 360, color, -1)
     return np.uint8(template)
 
+# funcao principal de aplicacao de textura nas digitais
 def applyRandomPatherns(img):
     height, width = img.shape
     center = int(width/2)
@@ -153,14 +173,8 @@ def applyRandomPatherns(img):
 
     return np.uint8(newImage)
 
-def customSum(img1, img2):
-    height, width = img1.shape
-    newImage = np.zeros(shape=img1.shape)
-    for i in range(0, height):
-        for j in range(0, width):
-            newImage[i, j] = min(img1[i,j], img2[i, j])
-    return newImage
-
+# calcula o polinomio usado na funcao de distorcao geometrica
+# foi adaptada do algoritmo do professor zaghetto do link: https://github.com/zaghetto/Touchless2Touch/blob/master/detectPolyn.m
 def detectPolyn(img, N):
     H, W = img.shape
     imf = np.uint8(np.ones(shape = img.shape)*255)
@@ -178,6 +192,8 @@ def detectPolyn(img, N):
     pol = np.polyfit(vech, -1*(vecw)+H,N)
     return np.polyval(pol, vech)
 
+# funcao que faz a suavizacao de bordas das digitais
+# foi adaptada do algoritmo do professor zaghetto do link: https://github.com/zaghetto/Touchless2Touch/blob/master/fadeCrop.m
 def fadeCrop(img):
     grau = 2
     fade = 6
@@ -219,6 +235,7 @@ def fadeCrop(img):
 
     return np.uint8(cropped)
 
+# funcao principal de processamento da digital
 def tranformFingerprint(imgpath, outputSubdirectory):
     img = cv2.imread(imgpath, cv2.IMREAD_GRAYSCALE)
     equalizedImg = localHistogramEqualization(img)
@@ -234,6 +251,16 @@ def tranformFingerprint(imgpath, outputSubdirectory):
     bubbledImg = applyRandomPatherns(thresholdLowImg)
     overlayImg = cv2.addWeighted(bubbledImg, 0.9, thresholdHighImg, 0.2, 0)
     result = fadeCrop(overlayImg)
+
+    # salva as imagens intermediarias geradas no processo de tranformacao da digital
+    imgArr = [
+        (outputSubdirectory+"-gamma.png", imgWithGamma),
+        (outputSubdirectory+"-binary.png", binaryMean),
+        (outputSubdirectory+"-distortion.png", imgDistortion),
+        (outputSubdirectory+"-equalizedImg.png", equalizedImg),
+        (outputSubdirectory+"-bubbled.png", overlayImg)
+    ]
+    saveIntermediaryImgs(imgArr, OUTPUT_PATH)
     return result
 
 def processAllFingerPrints():
